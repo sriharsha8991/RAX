@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/* ── RAX Emerald Design System ── */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: #0D9488;
+  --color-primary-foreground: #FFFFFF;
+  --color-primary-hover: #0F766E;
+
+  --color-background: #FFFFFF;
+  --color-surface: #F8FAFC;
+  --color-foreground: #0F172A;
+  --color-muted: #F1F5F9;
+  --color-muted-foreground: #64748B;
+  --color-border: #E2E8F0;
+
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-destructive: #EF4444;
+  --color-info: #3B82F6;
+  --color-accent: #8B5CF6;
+
+  --color-teal-50: #F0FDFA;
+  --color-teal-100: #CCFBF1;
+  --color-teal-400: #2DD4BF;
+  --color-teal-500: #14B8A6;
+  --color-teal-600: #0D9488;
+  --color-teal-700: #0F766E;
+  --color-teal-800: #115E59;
+  --color-teal-900: #134E4A;
+  --color-teal-950: #042F2E;
+}
+
+/* ── Dark mode overrides ── */
+.dark {
+  --color-primary: #2DD4BF;
+  --color-primary-foreground: #042F2E;
+  --color-primary-hover: #5EEAD4;
+
+  --color-background: #0C0A09;
+  --color-surface: #1C1917;
+  --color-foreground: #FAFAF9;
+  --color-muted: #1C1917;
+  --color-muted-foreground: #A8A29E;
+  --color-border: #292524;
+}
+
+/* ── Base ── */
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+/* ── Smooth scroll ── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── Scrollbar (minimal) ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
