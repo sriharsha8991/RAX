@@ -1,61 +1,209 @@
 # RAX — Resume Analysis eXpert
 
-An AI-powered hiring platform that uses semantic understanding and explainable AI to screen, evaluate, and shortlist candidates — replacing keyword-based ATS filtering with a fair, transparent, and distributed multi-agent pipeline.
+An AI-powered hiring platform that uses semantic understanding and explainable AI to screen, evaluate, and shortlist candidates — replacing keyword-based ATS filtering with a fair, transparent, and distributed multi-agent pipeline powered by a hybrid knowledge graph + vector search architecture.
+
+---
+
+## Team
+
+| Member | Role | Owns |
+|---|---|---|
+| **Person 1** | Backend Core | FastAPI, Supabase, Auth, DB models, CRUD APIs, Neo4j/Qdrant client setup |
+| **Person 2** | AI Pipeline | Gemini agents, Neo4j graph ingestion, Qdrant embedding, hybrid matching, WebSocket |
+| **Person 3** | Frontend | React + TypeScript, real-time UI, dashboards, candidate views, feedback |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | React.js + TypeScript (Vite) |
-| Backend | Python FastAPI |
-| Database | Supabase (PostgreSQL) |
-| Vector Store | Qdrant |
-| AI / LLM | Google Gemini (`gemini-1.5-pro` + `text-embedding-004`) |
-| Agent SDK | `google-generativeai` (custom orchestrator) |
-| Real-Time | WebSocket (FastAPI) |
-| Deployment | Vercel (frontend), Railway/Render (backend), Qdrant Cloud |
+| Layer | Technology | Purpose |
+|---|---|---|
+| Frontend | React.js + TypeScript (Vite) | SPA with real-time WebSocket support |
+| UI Framework | Tailwind CSS + shadcn/ui | Accessible, responsive components |
+| State Management | Zustand | Lightweight client-side state |
+| Backend | Python FastAPI | Async REST API + WebSocket server |
+| Auth | JWT (python-jose + passlib) | Stateless role-based authentication |
+| Database | Supabase (PostgreSQL) | Relational data — users, jobs, candidates, scores |
+| File Storage | Supabase Storage | Resume PDF/DOCX file storage |
+| Knowledge Graph | Neo4j (AuraDB / Docker) | Structural reasoning, skill taxonomy, explainable matching |
+| Vector Store | Qdrant | Semantic similarity search on embeddings |
+| AI / LLM | Google Gemini (`gemini-1.5-pro`) | Resume parsing, scoring, feedback generation |
+| Embeddings | Gemini `text-embedding-004` | 768-dim vector representations |
+| Real-Time | WebSocket (FastAPI native) | Live pipeline status updates |
+| Migrations | Alembic | Database schema versioning |
+| Deployment | Vercel / Railway / Neo4j AuraDB / Qdrant Cloud / Supabase | All free-tier cloud |
 
 ---
 
 ## Architecture Overview
 
 ```
-[Recruiter / Hiring Manager (Browser)]
-          |
-    [React Frontend]  <---WebSocket--->  [FastAPI Backend]
-                                               |
-                              ┌────────────────┼────────────────┐
-                         [Supabase]        [Qdrant]       [Agent Pipeline]
-                        (PostgreSQL)      (vectors)            |
-                                              ┌────────────────┘
-                                              ▼
-                              ResumeParserAgent
-                                    ↓
-                              BiasFilterAgent
-                                    ↓
-                              EmbeddingAgent ──► Qdrant
-                                    ↓
-                              MatchingAgent ◄── Qdrant
-                                    ↓
-                              ScoringAgent (Gemini)
-                                    ↓
-                              FeedbackAgent (on demand)
+┌─────────────────────────────────────────────────────┐
+│                   CLIENT TIER                        │
+│  React + TypeScript (Vite) + Tailwind + shadcn/ui   │
+│  Zustand state │ Axios REST │ WebSocket live updates │
+│  Deployed on: Vercel                                 │
+└──────────────────────┬──────────────────────────────┘
+                       │ REST API + WebSocket
+┌──────────────────────┼──────────────────────────────┐
+│                  SERVER TIER                         │
+│  Python FastAPI (async)                              │
+│  ┌────────────────────────────────────────────────┐  │
+│  │ Pipeline Orchestrator                          │  │
+│  │ ResumeParser → BiasFilter → [GraphIngestion    │  │
+│  │                              ║ Embedding]      │  │
+│  │                            → HybridMatch       │  │
+│  │                            → Scoring           │  │
+│  │ FeedbackAgent (on demand)                      │  │
+│  └────────────────────────────────────────────────┘  │
+│  JWT Auth │ Alembic Migrations │ Background Tasks    │
+│  Deployed on: Railway / Render                       │
+└───────┬──────────────┬──────────────┬───────────────┘
+        │              │              │
+┌───────┼──────┐ ┌─────┼──────┐ ┌────┼──────┐ ┌──────────────┐
+│  DATA TIER   │ │ GRAPH TIER │ │VECTOR TIER│ │   AI TIER    │
+│              │ │            │ │           │ │              │
+│  Supabase    │ │ Neo4j      │ │ Qdrant    │ │ Google       │
+│  (PostgreSQL)│ │ Knowledge  │ │ Vector DB │ │ Gemini       │
+│  + Storage   │ │ Graph      │ │           │ │              │
+│              │ │            │ │ resumes   │ │ gemini-1.5   │
+│  Users       │ │ Candidate  │ │ job_descs │ │ -pro         │
+│  Jobs        │ │ Skill      │ │           │ │              │
+│  Resumes     │ │ Company    │ │ Cosine    │ │ text-embed   │
+│  Analyses    │ │ Role       │ │ Similarity│ │ -004 (768d)  │
+│  Feedback    │ │ Education  │ │           │ │              │
+└──────────────┘ │ SkillClstr │ └───────────┘ └──────────────┘
+                 │ IS_SIMILAR │
+                 │ HAS_SKILL  │
+                 │ REQUIRES   │
+                 └────────────┘
 ```
 
 ---
 
-## Repository Structure (Target)
+## Hybrid Scoring System
+
+RAX uses **multi-dimensional scoring** instead of a single similarity number. Each candidate is evaluated across four weighted components:
+
+```
+Final Score = 0.50 × Structural Skill Match  (Neo4j Knowledge Graph)
+            + 0.30 × Semantic Similarity      (Qdrant Vector Search)
+            + 0.15 × Experience Match          (Neo4j Knowledge Graph)
+            + 0.05 × Education Match           (Neo4j Knowledge Graph)
+```
+
+| Dimension | Weight | Source | What It Measures |
+|---|---|---|---|
+| **Structural Skill Match** | 50% | Neo4j | Direct + similar skill matches via graph traversal; partial credit through `IS_SIMILAR_TO` edges |
+| **Semantic Similarity** | 30% | Qdrant | Cosine similarity between resume and JD embeddings; catches vocabulary mismatch |
+| **Experience Match** | 15% | Neo4j | Years-per-skill comparison against job requirements |
+| **Education Match** | 5% | Neo4j | Degree level comparison (High School=1 → PhD=5) |
+
+**Why these weights:**
+- **Structural (50%)** — Most reliable, most explainable signal; directly verifiable through graph paths
+- **Semantic (30%)** — Safety net when graph is sparse; captures career direction and domain alignment
+- **Experience (15%)** — Refinement signal, not a primary filter; avoids penalizing inflated JD requirements
+- **Education (5%)** — Weakest predictor of job performance; tiebreaker, not gatekeeper
+
+Weights are **configurable per job posting**. If the graph is sparse (poorly parsed resume), vector score naturally compensates.
+
+---
+
+## Knowledge Graph Schema (Neo4j)
+
+### Node Types
+
+| Node | Description | Created By |
+|---|---|---|
+| `Candidate` | Job applicant | GraphIngestionAgent |
+| `Job` | Job posting | Job creation API |
+| `Skill` | Technical or soft skill | GraphIngestionAgent |
+| `SkillCluster` | Skill category group | GraphIngestionAgent |
+| `Company` | Company candidate worked at | GraphIngestionAgent |
+| `Role` | Job title held | GraphIngestionAgent |
+| `Education` | Degree type | GraphIngestionAgent |
+| `Institution` | University/school (anonymized before scoring) | GraphIngestionAgent |
+
+### Relationships Checked During Scoring
+
+| Relationship | Direction | Properties | Scoring Impact |
+|---|---|---|---|
+| `HAS_SKILL` | Candidate → Skill | `years`, `proficiency` | Structural (50%) + Experience (15%) |
+| `REQUIRES_SKILL` | Job → Skill | `priority`, `min_years` | Structural (50%) + Experience (15%) |
+| `IS_SIMILAR_TO` | Skill → Skill | `score` (0–1) | Partial credit in Structural (50%) |
+| `BELONGS_TO` | Skill → SkillCluster | — | Hierarchical group matching |
+| `WORKED_AT` | Candidate → Company | `duration`, `start`, `end` | Experience (15%) |
+| `HELD_ROLE` | Candidate → Role | `title` | Seniority alignment |
+| `HAS_DEGREE` | Candidate → Education | `level`, `field` | Education (5%) |
+| `REQUIRES_DEGREE` | Job → Education | `min_level` | Education (5%) |
+| `STUDIED_AT` | Candidate → Institution | — | **Excluded from scoring** (bias prevention) |
+
+### Self-Enriching Graph
+
+The knowledge graph grows with every resume processed:
+1. New resumes create `Skill` nodes and `HAS_SKILL` edges
+2. `EmbeddingAgent` checks Qdrant for skill vector proximity
+3. If two skills have cosine similarity > 0.7 but no `IS_SIMILAR_TO` edge → auto-created in Neo4j
+4. Future candidates benefit from richer partial credit paths
+
+---
+
+## AI Pipeline (Multi-Agent)
+
+```
+Resume Upload (PDF/DOCX)
+        │
+        ▼
+┌───────────────────┐
+│ ResumeParserAgent │  Extract text → Gemini → structured JSON
+└────────┬──────────┘
+         ▼
+┌───────────────────┐
+│ BiasFilterAgent   │  Anonymize name, gender, institution → [UNIVERSITY]
+└────────┬──────────┘
+         │
+   ┌─────┴──────┐        (parallel execution)
+   ▼             ▼
+┌──────────┐ ┌──────────┐
+│ Graph    │ │ Embedding│
+│ Ingestion│ │ Agent    │
+│ → Neo4j  │ │ → Qdrant │
+└────┬─────┘ └────┬─────┘
+     └──────┬─────┘
+            ▼
+┌───────────────────────┐
+│ HybridMatchingAgent   │  Neo4j graph traversal + Qdrant cosine similarity
+└────────┬──────────────┘  → fused weighted score
+         ▼
+┌───────────────────┐
+│ ScoringAgent      │  Gemini + hybrid context → multi-dim scores + explanation
+└────────┬──────────┘
+         ▼
+   Stored in DB + pushed via WebSocket
+
+┌───────────────────┐
+│ FeedbackAgent     │  On-demand: AI-generated constructive rejection feedback
+└───────────────────┘
+```
+
+---
+
+## Repository Structure
 
 ```
 repo-dev1/
 ├── README.md
 ├── .env.example
 ├── .gitignore
-├── docker-compose.yml          # local dev: Qdrant only (Supabase is cloud-hosted)
+├── docker-compose.yml          # local dev: Neo4j + Qdrant (Supabase is cloud-hosted)
 ├── docs/
-│   └── initial_doc.md
+│   ├── initial_doc.md
+│   ├── stage2_design_document.md
+│   ├── stage2_doc_requirment.md
+│   ├── stage2_ppt_detailed.md
+│   ├── stage2_ppt_short.md
+│   ├── scoring_and_kg_relationships.md
+│   └── architecture_eraserio.md
 ├── frontend/                   # React + TypeScript (Person 3)
 │   ├── src/
 │   │   ├── pages/
@@ -69,11 +217,26 @@ repo-dev1/
     │   ├── main.py
     │   ├── config.py
     │   ├── db/
+    │   │   ├── session.py          # SQLAlchemy async (Supabase Postgres)
+    │   │   ├── base.py
+    │   │   ├── supabase_client.py
+    │   │   ├── neo4j_client.py     # Neo4j async driver + session factory
+    │   │   └── qdrant_client.py    # Qdrant client init + collection setup
     │   ├── models/
     │   ├── schemas/
     │   ├── api/
     │   │   └── routes/
     │   └── agents/             # AI pipeline (Person 2)
+    │       ├── pipeline_context.py
+    │       ├── base_agent.py
+    │       ├── resume_parser_agent.py
+    │       ├── bias_filter_agent.py
+    │       ├── graph_ingestion_agent.py   # Neo4j graph decomposition
+    │       ├── embedding_agent.py         # Qdrant vector embedding
+    │       ├── hybrid_matching_agent.py   # Fuses Neo4j + Qdrant signals
+    │       ├── scoring_agent.py
+    │       ├── feedback_agent.py
+    │       └── orchestrator.py
     ├── alembic/
     ├── tests/
     ├── Dockerfile
@@ -89,8 +252,9 @@ repo-dev1/
 - Node.js 20+
 - Python 3.11+
 - A Google Gemini API key
-- A [Supabase](https://supabase.com) account (free tier) — create a project to get `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_ANON_KEY`
-- A Qdrant Cloud account (free tier) or local Qdrant via Docker
+- A [Supabase](https://supabase.com) account (free tier) — provides `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+- Neo4j AuraDB (free tier) or local Neo4j via Docker
+- Qdrant Cloud (free 1 GB) or local Qdrant via Docker
 
 ### 1. Clone & configure env
 
@@ -98,13 +262,14 @@ repo-dev1/
 git clone <repo-url>
 cd repo-dev1
 cp .env.example .env
-# Fill in GOOGLE_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY, DATABASE_URL (Supabase Postgres URI), QDRANT_URL, QDRANT_API_KEY, SECRET_KEY
+# Fill in: GOOGLE_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY, DATABASE_URL,
+#          NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, QDRANT_URL, QDRANT_API_KEY, SECRET_KEY
 ```
 
 ### 2. Start local services
 
 ```bash
-docker-compose up -d   # starts Qdrant locally (Supabase DB is cloud-hosted — no local Postgres needed)
+docker-compose up -d   # starts Neo4j + Qdrant locally (Supabase DB is cloud-hosted)
 ```
 
 ### 3. Run the backend
@@ -112,7 +277,7 @@ docker-compose up -d   # starts Qdrant locally (Supabase DB is cloud-hosted — 
 ```bash
 cd backend
 python -m venv .venv
-.venv\Scripts\activate      # Windows
+.venv\Scripts\activate      # Windows  (source .venv/bin/activate on Mac/Linux)
 pip install -r requirements.txt
 alembic upgrade head
 uvicorn app.main:app --reload
@@ -130,40 +295,38 @@ npm run dev
 
 ---
 
-## Full Build Plan
+## Implementation Plan (3-Person, 6 Weeks)
 
-### Phase 0 — Project Scaffolding (Shared)
-- Update README, `.env.example`, `.gitignore`
-- Create `docker-compose.yml` with `qdrant/qdrant` container only (named volume + health check)
-- Create a Supabase project at [supabase.com](https://supabase.com); copy the connection string, project URL, and anon key into `.env`
-
----
-
-## Engineer Assignments
+### Phase 0 — Project Scaffolding (All 3 members · Week 1)
+- Finalize README, `.env.example`, `.gitignore`
+- Docker Compose with `neo4j:5-community` + `qdrant/qdrant` (named volumes + health checks)
+- Create Supabase project; copy connection string + keys into `.env`
+- Create Neo4j AuraDB free instance or verify local Docker works
 
 ---
 
-### 👤 Person 1 — Backend Core (FastAPI + Supabase + Auth)
+### Person 1 — Backend Core (FastAPI + Supabase + Auth)
 
-**Owns:** `backend/app/db/`, `backend/app/models/`, `backend/app/schemas/`, `backend/app/api/routes/`, `backend/alembic/`, `backend/app/api/dependencies.py`
+**Owns:** `backend/app/db/`, `backend/app/models/`, `backend/app/schemas/`, `backend/app/api/routes/`, `backend/alembic/`
 
-#### Phase 1 — Backend Core
+#### Phase 1 — Backend Core (Weeks 2–3)
 
-**Step 1 — Project bootstrap**
+**Step 1 — Project Bootstrap**
 - Create `backend/` with `requirements.txt`:
   `fastapi`, `uvicorn`, `sqlalchemy[asyncio]`, `alembic`, `asyncpg`, `psycopg2-binary`, `supabase`, `python-dotenv`, `pydantic-settings`, `python-jose[cryptography]`, `passlib[bcrypt]`, `python-multipart`
-- `supabase` Python SDK (`supabase-py`) is included for Supabase client access (storage, realtime); core DB uses SQLAlchemy async over Supabase's Postgres connection string
-- `backend/app/main.py` — FastAPI instance, CORS middleware, router inclusion, lifespan handler (DB init, Qdrant collection init)
+- `backend/app/main.py` — FastAPI instance, CORS middleware, router inclusion, lifespan handler (DB init, Neo4j driver init, Qdrant collection init)
 - `backend/app/config.py` — Pydantic `Settings` class reading from env vars
 
-**Step 2 — Database layer**
-- `backend/app/db/session.py` — SQLAlchemy async engine pointing at Supabase Postgres URI (`DATABASE_URL`); `get_db` dependency
-  - Supabase requires `?sslmode=require` appended to the connection string
-- `backend/app/db/base.py` — declarative base
-- `backend/app/db/supabase_client.py` — Supabase Python client init (`create_client(SUPABASE_URL, SUPABASE_ANON_KEY)`), used for file storage (resume files) and realtime if needed
-- `backend/alembic/` — `alembic init`, configure to use async engine against Supabase
+**Step 2 — Database Layer**
+- `session.py` — SQLAlchemy async engine pointing at Supabase Postgres URI (`?sslmode=require`)
+- `base.py` — declarative base
+- `supabase_client.py` — Supabase Python client for file storage
+- `neo4j_client.py` — Neo4j async driver init + session factory
+- `qdrant_client.py` — Qdrant client init + collection creation (`resumes`, `job_descriptions`)
+- `alembic/` — async-aware config against Supabase
 
-**Step 3 — SQLAlchemy Models** (`backend/app/models/`)
+**Step 3 — SQLAlchemy Models**
+
 | Model | Key Fields |
 |---|---|
 | `user.py` | `id`, `email`, `hashed_password`, `role` (recruiter \| hiring_manager), `created_at` |
@@ -173,221 +336,223 @@ npm run dev
 | `analysis.py` | `id`, `resume_id`, `overall_score`, `skills_score`, `experience_score`, `education_score`, `explanation`, `strengths` (JSONB), `gaps` (JSONB) |
 | `feedback.py` | `id`, `candidate_id`, `job_id`, `content`, `sent_at` |
 
-**Step 4 — Pydantic Schemas** (`backend/app/schemas/`)
-- Request/response schemas for every model with field validation
+**Step 4 — Pydantic Schemas** — Request/response schemas with field validation
 
 **Step 5 — Auth**
-- `backend/app/api/routes/auth.py` — `POST /auth/register`, `POST /auth/login` (returns JWT)
-- `backend/app/api/dependencies.py` — `get_current_user` dependency (JWT decode)
+- `POST /auth/register`, `POST /auth/login` (returns JWT)
+- `get_current_user` dependency (JWT decode)
 
-**Step 6 — API Routes** (`backend/app/api/routes/`)
-- `jobs.py` — CRUD for job postings; on create, fire JD embedding (call Person 2's `EmbeddingAgent`)
-- `resumes.py` — bulk file upload; store to disk; trigger `PipelineOrchestrator` as `BackgroundTask`
-- `candidates.py` — list candidates ranked by score for a job; filter/sort params
-- `analysis.py` — fetch full analysis detail for a resume
-- `feedback.py` — trigger `FeedbackAgent` (Person 2) and retrieve result
+**Step 6 — API Routes**
+- `jobs.py` — CRUD; on create → fires JD embedding + graph ingestion (calls Person 2's agents)
+- `resumes.py` — bulk upload; stores file; triggers `PipelineOrchestrator` as `BackgroundTask`
+- `candidates.py` — ranked list by score for a job; filter/sort
+- `analysis.py` — full analysis detail for a resume
+- `feedback.py` — trigger `FeedbackAgent` and retrieve result
 
-**Step 7 — Alembic migration**
-- Generate initial revision from models
-- Apply against Supabase cloud Postgres via `alembic upgrade head` (uses `DATABASE_URL` from `.env`)
-- Alternatively: use Supabase dashboard SQL editor to review generated DDL before applying
+**Step 7 — Alembic Migration** — Generate + apply against Supabase Postgres
 
-**Step 8 — Unit tests** (`backend/tests/`)
-- Test all route handlers with `httpx.AsyncClient` + mocked DB
-- Test auth: register, login, protected route guard
+**Step 8 — Unit Tests** — `httpx.AsyncClient` + mocked DB; test auth + route guards
 
 ---
 
-### 👤 Person 2 — Agentic AI Pipeline (Gemini + Qdrant + WebSocket)
+### Person 2 — AI Pipeline (Gemini + Neo4j + Qdrant + WebSocket)
 
 **Owns:** `backend/app/agents/`, `backend/app/api/routes/ws.py`
 
-**Additional deps to add to `requirements.txt`:**
-`google-generativeai`, `qdrant-client`, `pypdf2`, `python-docx`, `tiktoken`
+**Additional deps:** `google-generativeai`, `neo4j`, `qdrant-client`, `pypdf2`, `python-docx`
 
-#### Phase 2 — Multi-Agent Pipeline
+#### Phase 2 — Multi-Agent Pipeline (Weeks 2–4)
 
-All agents share a `PipelineContext` dataclass. Every agent is a Python class exposing `async def run(ctx: PipelineContext) -> PipelineContext`.
+All agents share a `PipelineContext` dataclass. Each agent: `async def run(ctx: PipelineContext) -> PipelineContext`
 
 **Step 1 — Foundation**
-- `backend/app/agents/pipeline_context.py`
-  ```
-  PipelineContext:
-    resume_id, job_id, raw_text, parsed_resume, filtered_resume,
-    resume_embedding, match_result, analysis, qdrant_point_id
-  ```
-- `backend/app/agents/base_agent.py` — abstract `BaseAgent`; initializes shared Gemini client (`genai.configure(api_key=...)`)
+- `pipeline_context.py` — `resume_id`, `job_id`, `raw_text`, `parsed_resume`, `filtered_resume`, `graph_node_id`, `qdrant_point_id`, `match_result`, `analysis`
+- `base_agent.py` — abstract `BaseAgent`; shared Gemini client init
 
-**Step 2 — ResumeParserAgent** (`resume_parser_agent.py`)
-- Extract raw text from PDF (PyPDF2) and DOCX (python-docx)
-- Gemini prompt → structured JSON extraction:
-  `{ skills, experience [{title, company, duration, description}], education [{degree, institution, year}], name, email, phone }`
-- Store result in `ctx.parsed_resume`
+**Step 2 — ResumeParserAgent**
+- Extract raw text from PDF (PyPDF2) / DOCX (python-docx)
+- Gemini prompt → structured JSON: `{ skills, experience[], education[], name, email, phone }`
 
-**Step 3 — BiasFilterAgent** (`bias_filter_agent.py`)
-- Receive `ctx.parsed_resume`
-- Gemini redaction prompt: anonymize `name`, gender signals, institution names (→ `[UNIVERSITY]`), nationality signals
-- Store in `ctx.filtered_resume`; preserve original separately
+**Step 3 — BiasFilterAgent**
+- Anonymize: name → `[CANDIDATE_ID]`, institutions → `[UNIVERSITY]`, gender/nationality signals removed
+- Runs BEFORE any scoring
 
-**Step 4 — EmbeddingAgent** (`embedding_agent.py`)
-- Use `models/text-embedding-004` (Gemini) to embed `ctx.filtered_resume` text
-- Shared utility: also embed job description when a new job is created
-- Upsert vectors into Qdrant (`resumes` collection + `job_descriptions` collection)
-- Store `qdrant_point_id` in `ctx`
+**Step 4 — GraphIngestionAgent**
+- Decompose resume into Neo4j nodes: `Candidate`, `Skill`, `Company`, `Role`, `Education`, `Institution`
+- Create relationships: `HAS_SKILL`, `WORKED_AT`, `HELD_ROLE`, `STUDIED_AT`, `HAS_DEGREE` with properties
+- Normalize skill names via Gemini; classify into `SkillCluster` nodes
+- `MERGE` for idempotency
+- Also handles JD ingestion: `REQUIRES_SKILL`, `REQUIRES_DEGREE`
 
-**Step 5 — MatchingAgent** (`matching_agent.py`)
-- Query Qdrant: cosine similarity of resume embedding against target job embedding
-- Return `semantic_similarity_score` (0.0–1.0) + top matching skill/experience snippets
-- Store in `ctx.match_result`
+**Step 5 — EmbeddingAgent** (parallel with Step 4)
+- Embed resume text using Gemini `text-embedding-004` (768-dim)
+- Upsert into Qdrant `resumes` + `job_descriptions` collections
 
-**Step 6 — ScoringAgent** (`scoring_agent.py`)
-- Gemini prompt combining: JD requirements + `ctx.filtered_resume` + `ctx.match_result`
-- Output JSON:
-  `{ overall_score, skills_score, experience_score, education_score, strengths[], gaps[], explanation }`
-  (all scores 0–100)
-- Persist result to `analyses` table via SQLAlchemy session
+**Step 6 — HybridMatchingAgent**
+- Neo4j Cypher: direct skill matches, `IS_SIMILAR_TO` partial credit, experience depth, education fit
+- Qdrant: cosine similarity resume ↔ JD
+- Score fusion: `0.50 × structural + 0.30 × semantic + 0.15 × experience + 0.05 × education`
+- Auto-enrichment: if Qdrant finds high similarity between two skills with no Neo4j edge → create `IS_SIMILAR_TO`
 
-**Step 7 — FeedbackAgent** (`feedback_agent.py`)
-- Invoked on demand via recruiter action (not in main pipeline run)
-- Gemini prompt: generate 150–200 word constructive feedback email (professional tone, growth-focused)
-- Persist to `feedback` table
+**Step 7 — ScoringAgent**
+- Gemini prompt with hybrid context → `{ overall_score, skills_score, experience_score, education_score, strengths[], gaps[], explanation }`
+- Persist to `analyses` table
 
-**Step 8 — PipelineOrchestrator** (`orchestrator.py`)
-- Accepts `resume_id` + `job_id`
-- Runs agents in order: `ResumeParser → BiasFilter → Embedding → Matching → Scoring`
-- Updates `resume.status`: `queued → processing → completed | failed`
-- Publishes status events to WebSocket channel after each agent completes
-- Designed as FastAPI `BackgroundTask` (fully async)
+**Step 8 — FeedbackAgent** (on-demand, not in main pipeline)
+- Gemini prompt → 150–200 word constructive feedback referencing specific graph matches/gaps
 
-#### Phase 3 — Real-Time WebSocket
+**Step 9 — PipelineOrchestrator**
+- Runs: `ResumeParser → BiasFilter → [GraphIngestion ║ Embedding] → HybridMatching → Scoring`
+- Updates `resume.status` per stage
+- Publishes WebSocket events after each agent
 
-**Step 9 — WebSocket route** (`backend/app/api/routes/ws.py`)
-- Endpoint: `WS /ws/pipeline/{job_id}`
-- In-memory pub/sub manager; orchestrator publishes events as each agent finishes
-- Event shape: `{ resume_id, candidate_name, stage, status, score? }`
-- Stages: `parsing → filtering → embedding → matching → scoring → completed | failed`
+#### Phase 3 — Real-Time WebSocket (Week 4)
 
-**Step 10 — Unit tests** (`backend/tests/agents/`)
-- Mock Gemini API and Qdrant client
-- Test each agent's input/output contract in isolation
-- Test orchestrator end-to-end with all agents mocked
+**Step 10 — WebSocket Route**
+- `WS /ws/pipeline/{job_id}`
+- In-memory pub/sub; events: `{ resume_id, stage, status, score? }`
+- Stages: `parsing → filtering → graph_ingestion → embedding → hybrid_matching → scoring → completed`
+
+**Step 11 — Unit Tests** — Mock Gemini, Neo4j, Qdrant; test each agent's I/O contract
 
 ---
 
-### 👤 Person 3 — Frontend (React + TypeScript + Vite)
+### Person 3 — Frontend (React + TypeScript + Vite)
 
 **Owns:** `frontend/`
 
 **Key packages:** `react-router-dom`, `axios`, `zustand`, `react-hook-form`, `zod`, `tailwindcss`, `shadcn/ui`, `react-dropzone`, `recharts`
 
-#### Phase 4 — Frontend
+#### Phase 4 — Frontend (Weeks 2–5)
 
 **Step 1 — Scaffold**
 ```bash
 npm create vite@latest frontend -- --template react-ts
-cd frontend
-npm install react-router-dom axios zustand react-hook-form zod react-dropzone recharts
-npx tailwindcss init
-npx shadcn-ui@latest init
+cd frontend && npm install react-router-dom axios zustand react-hook-form zod react-dropzone recharts
+npx tailwindcss init && npx shadcn-ui@latest init
 ```
 
-**Step 2 — Auth Store & Service** (`src/store/authStore.ts`, `src/services/authService.ts`)
+**Step 2 — Auth Store & Service**
 - Zustand store: `{ token, user, login(), logout() }`
-- Axios instance with JWT `Authorization` header interceptor
-- Protected route wrapper checking token validity
+- Axios instance with JWT header interceptor
+- Protected route wrapper
 
-**Step 3 — Auth Pages** (`src/pages/`)
-- `LoginPage.tsx` — email/password form (react-hook-form + zod); `POST /auth/login`
-- `RegisterPage.tsx` — email, password, role selector (recruiter | hiring_manager)
+**Step 3 — Auth Pages**
+- `LoginPage.tsx` — email/password (react-hook-form + zod)
+- `RegisterPage.tsx` — email, password, role selector
 
-**Step 4 — App Shell** (`src/components/layout/`)
-- `AppShell.tsx` — sidebar nav: Dashboard, Jobs, Candidates, Settings
-- `ProtectedRoute.tsx` — redirects unauthenticated users to `/login`
+**Step 4 — App Shell**
+- Sidebar nav: Dashboard, Jobs, Candidates, Settings
+- `ProtectedRoute.tsx` redirect guard
 
-**Step 5 — Dashboard** (`src/pages/DashboardPage.tsx`)
-- Summary cards: active jobs, total resumes processed this week, avg time-to-screen
-- Top candidates widget (ranked across all jobs)
+**Step 5 — Dashboard**
+- Summary cards: active jobs, resumes processed, avg time-to-screen
+- Top candidates widget
 
 **Step 6 — Job Management**
-- `JobListPage.tsx` — table with status badges (Active, Closed, Draft); create button
-- `CreateJobPage.tsx` / `JobDetailPage.tsx` — rich text area for job description + requirements; on save → `POST /jobs` (triggers JD embedding on backend)
+- `JobListPage.tsx` — table with status badges; create button
+- `CreateJobPage.tsx` — rich text JD area; `POST /jobs` triggers JD embedding
 
-**Step 7 — Resume Upload** (`src/pages/UploadPage.tsx`)
-- `react-dropzone` multi-file drop zone (PDF/DOCX only)
-- `POST /resumes/bulk` with `multipart/form-data`
-- Opens WebSocket `WS /ws/pipeline/{job_id}` on upload start
-- Real-time processing cards per resume: animated stage indicators (parsing → filtering → scoring) → score badge reveal on completion
+**Step 7 — Resume Upload**
+- `react-dropzone` multi-file zone (PDF/DOCX)
+- `POST /resumes/bulk` (multipart)
+- Opens WebSocket on upload → real-time processing cards per resume with animated stage indicators
 
-**Step 8 — Candidate List** (`src/pages/CandidateListPage.tsx`)
-- Ranked table: overall score, skills score, experience score, education score
-- Sortable columns; filter by score range slider
-- "Reveal Identity" toggle per row (shows/hides anonymized fields)
-- Click row → Candidate Detail
+**Step 8 — Candidate List**
+- Ranked table: overall, skills, experience, education scores
+- Sortable columns; score range filter slider
+- "Reveal Identity" toggle per row
 
-**Step 9 — Candidate Detail** (`src/pages/CandidateDetailPage.tsx`)
-- Radar chart (Recharts) — skills / experience / education scores
-- Expandable "Strengths" and "Gaps" card lists from AI analysis
-- Full AI explanation text block
-- "Generate Feedback" button → `POST /feedback/{candidate_id}/{job_id}` → opens Feedback view
+**Step 9 — Candidate Detail**
+- Radar chart (Recharts) — skills / experience / education
+- Strengths + Gaps cards from AI analysis
+- Full AI explanation text
+- "Generate Feedback" button
 
-**Step 10 — Feedback View** (`src/pages/FeedbackPage.tsx`)
-- Displays generated feedback text
+**Step 10 — Feedback View**
+- Generated feedback text display
 - Copy-to-clipboard button
-- "Mark as Sent" toggle (updates sent_at timestamp)
+- "Mark as Sent" toggle
 
-**Step 11 — API service layer** (`src/services/`)
-- Typed Axios wrappers for all backend endpoints
-- `useProcessingStream.ts` — custom React hook managing WebSocket lifecycle (connect, message handler, reconnect, cleanup)
+**Step 11 — API Service Layer**
+- Typed Axios wrappers for all endpoints
+- `useProcessingStream.ts` — WebSocket hook (connect, message handler, reconnect, cleanup)
 
-**Step 12 — Deployment config**
-- `frontend/vercel.json` — SPA rewrite rules (`"rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]`)
-- Set `VITE_API_URL` env var in Vercel project settings
+**Step 12 — Deployment Config**
+- `vercel.json` — SPA rewrite rules
+- `VITE_API_URL` env var in Vercel
 
-**Step 13 — Component tests**
-- Vitest + React Testing Library
-- Test: upload flow, score card rendering, auth guard redirect, WebSocket hook mock
+**Step 13 — Component Tests** — Vitest + React Testing Library
 
 ---
 
-## Phase 5 — Deployment (Shared / DevOps)
+## Deployment (Phase 5 — All members · Week 5)
 
 | Service | Platform | Notes |
 |---|---|---|
-| Frontend | **Vercel** | Auto-deploy from `frontend/` subfolder; set `VITE_API_URL` |
-| Backend | **Railway** or **Render** | Dockerfile or Nixpacks; set all env vars |
-| Database | **Supabase** (free tier) | Managed PostgreSQL; provides `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` |
-| File Storage | **Supabase Storage** | Store uploaded resume PDFs/DOCX in a `resumes` bucket |
-| Qdrant | **Qdrant Cloud** (free 1 GB cluster) | `QDRANT_URL` + `QDRANT_API_KEY` |
-
-- `backend/Dockerfile` — multi-stage Python image; `uvicorn app.main:app --host 0.0.0.0 --port 8000`
-- `backend/railway.toml` or `render.yaml` — backend deploy config
-- `frontend/vercel.json` — SPA routing rewrites
+| Frontend | **Vercel** | Auto-deploy from `frontend/`; set `VITE_API_URL` |
+| Backend | **Railway** or **Render** | Dockerfile; set all env vars |
+| Database | **Supabase** (free tier) | Managed PostgreSQL + file storage |
+| Knowledge Graph | **Neo4j AuraDB** (free tier) | 200K nodes, 400K relationships |
+| Vector DB | **Qdrant Cloud** (free 1 GB) | Semantic similarity search |
+| AI/LLM | **Google Gemini API** | Free tier with rate limits |
 
 ---
 
-## Phase 6 — Integration Verification (Shared)
+## Integration Verification (Phase 6 — All members · Week 6)
 
-1. `docker-compose up` → confirm Qdrant healthy (Postgres runs on Supabase cloud)
-2. `alembic upgrade head` → confirm all tables created in Supabase (verify via Supabase dashboard → Table Editor)
+1. `docker-compose up` → confirm Neo4j + Qdrant healthy
+2. `alembic upgrade head` → verify tables in Supabase dashboard
 3. Register two accounts (recruiter + hiring_manager)
-4. Create a job posting → confirm JD vector stored in Qdrant
-5. Upload 3 sample PDFs → watch WebSocket real-time stage cards
-6. Confirm ranked candidate list with scores + explanations in frontend
-7. Generate feedback for a candidate → verify content quality
-8. Check Qdrant dashboard (`http://localhost:6333/dashboard`) → confirm resume vectors stored
+4. Create a job posting → confirm JD vector in Qdrant + `REQUIRES_SKILL` edges in Neo4j
+5. Upload 3 sample PDFs → watch WebSocket processing cards
+6. Confirm ranked candidate list with scores + explanations
+7. Neo4j browser → `MATCH (c:Candidate)-[:HAS_SKILL]->(s:Skill)<-[:REQUIRES_SKILL]-(j:Job) RETURN c, s, j`
+8. Qdrant dashboard → confirm resume vectors stored
+9. Generate feedback → verify it references specific skill matches/gaps
+10. Verify hybrid scoring: structural score + vector similarity in analysis detail
+
+---
+
+## Key Milestones
+
+| Milestone | Target | What's Working |
+|---|---|---|
+| M1 | End of Week 1 | Repo scaffolded, Docker running Neo4j + Qdrant, Supabase live |
+| M2 | End of Week 3 | Backend API: auth + CRUD + DB + Neo4j/Qdrant clients |
+| M3 | End of Week 4 | Full pipeline: upload PDF → graph + vectors → hybrid scores + explanation |
+| M4 | End of Week 5 | Frontend integrated: complete recruiter workflow live |
+| M5 | End of Week 6 | Deployed + verified end-to-end on cloud |
+
+---
+
+## Risk Mitigation
+
+| Risk | Mitigation |
+|---|---|
+| Gemini API rate limits | Retry with exponential backoff; cache embeddings |
+| Supabase connection limits | Connection pooling (pgBouncer built in) |
+| Neo4j 200K node limit | Normalize/dedup skill names; monitor count |
+| Qdrant 1 GB limit | Compress payloads; monitor usage |
+| Sparse graph (bad parse) | Qdrant vector score compensates; hybrid weights auto-adjust |
+| Resume parsing variance | Validate JSON schema; fallback to raw-text scoring |
+| WebSocket drops | Client-side reconnect + graceful fallback to polling |
 
 ---
 
 ## Environment Variables
 
-See [.env.example](.env.example) for the full list. Required keys:
+See `.env.example` for the full list. Required:
 
 | Variable | Purpose |
 |---|---|
 | `GOOGLE_API_KEY` | Google Gemini API access |
-| `DATABASE_URL` | Supabase PostgreSQL connection string (`postgresql+asyncpg://postgres:[password]@db.[ref].supabase.co:5432/postgres?sslmode=require`) |
-| `SUPABASE_URL` | Supabase project URL (`https://[ref].supabase.co`) |
-| `SUPABASE_ANON_KEY` | Supabase public anon key (for client SDK) |
+| `DATABASE_URL` | Supabase PostgreSQL connection string |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Supabase public anon key |
+| `NEO4J_URI` | Neo4j connection URI (`bolt://localhost:7687` or AuraDB) |
+| `NEO4J_USERNAME` | Neo4j username |
+| `NEO4J_PASSWORD` | Neo4j password |
 | `QDRANT_URL` | Qdrant instance URL |
 | `QDRANT_API_KEY` | Qdrant Cloud API key |
 | `SECRET_KEY` | JWT signing secret |
