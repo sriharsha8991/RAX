@@ -30,9 +30,7 @@ backend/uploads/
 *.pdf
 
 # Persona plans (individual — not shared via git)
-repo_persona_plan.md
-persona_plan_backend.md
-persona_plan_frontend.md
+
 *.docx
 
 # OS
@@ -48,5 +46,4 @@ Thumbs.db
 # Alembic
 *.pyc
 
-# Persona plans (personal, not shared)
-repo_persona_plan.md
+
