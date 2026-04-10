@@ -3,7 +3,6 @@
 > **Owner:** Person 3 — Frontend (React, TypeScript, Real-Time UI, Dashboards)
 > **Scope:** `frontend/` (entire directory)
 > **Do NOT touch:** `backend/` (Person 1 + Person 2 own this)
-
 ---
 
 ## What Already Exists
