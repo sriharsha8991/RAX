@@ -31,6 +31,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Supabase client init skipped: %s", e)
 
+    # Auto-create tables when using SQLite (local dev mode)
+    from app.db.session import async_engine, _url
+    if "sqlite" in _url:
+        from app.db.base import Base
+        from app.models import User, Job, Candidate, Resume, Analysis, Feedback  # noqa: F401
+        async with async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("SQLite tables created for local dev")
+
     yield
 
     # ── Shutdown ──
@@ -59,6 +68,7 @@ app.add_middleware(
 
 # ── Router Registration ──
 from app.api.routes import auth, jobs, resumes, candidates, analysis, feedback  # noqa: E402
+from app.api.routes import ws  # noqa: E402
 
 app.include_router(auth.router,       prefix="/api/auth",       tags=["Auth"])
 app.include_router(jobs.router,       prefix="/api/jobs",       tags=["Jobs"])
@@ -66,6 +76,7 @@ app.include_router(resumes.router,    prefix="/api/resumes",    tags=["Resumes"]
 app.include_router(candidates.router, prefix="/api",            tags=["Candidates"])
 app.include_router(analysis.router,   prefix="/api",            tags=["Analysis"])
 app.include_router(feedback.router,   prefix="/api/feedback",   tags=["Feedback"])
+app.include_router(ws.router,         tags=["WebSocket"])
 
 
 @app.get("/health")

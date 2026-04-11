@@ -23,7 +23,8 @@ if _url.startswith("postgresql://"):
     _url = _url.replace("postgresql://", "postgresql+asyncpg://", 1)
 elif _url.startswith("postgres://"):
     _url = _url.replace("postgres://", "postgresql+asyncpg://", 1)
-config.set_main_option("sqlalchemy.url", _url)
+# Escape '%' for ConfigParser interpolation
+config.set_main_option("sqlalchemy.url", _url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

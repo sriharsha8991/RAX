@@ -17,6 +17,11 @@ class PipelineContext:
     resume_id: str = ""
     job_id: str = ""
 
+    # ── Job data (loaded at pipeline start) ──
+    job_title: str = ""
+    job_description: str = ""
+    job_requirements: dict[str, Any] = field(default_factory=dict)
+
     # ── Input: raw file bytes (PDF/DOCX) for text extraction ──
     file_bytes: bytes = b""
     filename: str = ""
@@ -32,6 +37,16 @@ class PipelineContext:
     #   "skills": [{"name": str, "years": int, "proficiency": str}],
     #   "experience": [{"title": str, "company": str, "duration": str, "description": str}],
     #   "education": [{"degree": str, "field": str, "institution": str, "year": int}]
+    # }
+
+    # ── Stage 1b: ExperienceExtractorAgent output (LLM judge) ──
+    enriched_experience: dict[str, Any] = field(default_factory=dict)
+    # Expected shape:
+    # {
+    #   "total_years_experience": float,
+    #   "seniority_level": str,
+    #   "experience_entries": [{"title", "company", "start_date", "end_date", "duration_months", "key_technologies"}],
+    #   "skill_experience": [{"skill", "estimated_years", "evidence"}]
     # }
 
     # ── Stage 2: BiasFilterAgent output ──
