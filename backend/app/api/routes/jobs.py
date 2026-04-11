@@ -27,6 +27,7 @@ async def list_jobs(
         select(Job).where(Job.created_by == current_user.id).order_by(Job.created_at.desc())
     )
     jobs = list(result.scalars().all())
+    logger.info("Listed %d jobs for user %s", len(jobs), current_user.id)
     return JobListResponse(jobs=jobs, total=len(jobs))
 
 
@@ -45,6 +46,7 @@ async def create_job(
     db.add(job)
     await db.commit()
     await db.refresh(job)
+    logger.info("Job created: %s '%s' by user %s", job.id, job.title, current_user.id)
 
     # Non-blocking agent integration (best-effort)
     try:
@@ -90,6 +92,7 @@ async def get_job(
     )
     job = result.scalar_one_or_none()
     if job is None:
+        logger.warning("Job %s not found for user %s", job_id, current_user.id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     return job
 
@@ -106,6 +109,7 @@ async def update_job(
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     if job.created_by != current_user.id:
+        logger.warning("Job update denied — user %s not owner of job %s", current_user.id, job_id)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not the job owner")
 
     update_data = body.model_dump(exclude_unset=True)
@@ -113,6 +117,7 @@ async def update_job(
         setattr(job, field, value)
     await db.commit()
     await db.refresh(job)
+    logger.info("Job updated: %s", job_id)
     return job
 
 
@@ -137,6 +142,7 @@ async def delete_job(
     # Delete child records: feedback → analysis → resumes → job
     resume_result = await db.execute(select(Resume).where(Resume.job_id == job_id))
     resumes = list(resume_result.scalars().all())
+    logger.info("Deleting job %s with %d resumes", job_id, len(resumes))
     for resume in resumes:
         await db.execute(
             select(Feedback).where(Feedback.resume_id == resume.id)

@@ -1,11 +1,13 @@
 """Async SQLAlchemy engine and session factory."""
 
+import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # Supabase requires sslmode=require; asyncpg uses the 'ssl' query-param instead
@@ -31,6 +33,7 @@ if "sqlite" not in _url:
     _engine_kwargs.update({"pool_size": 10, "max_overflow": 20})
 
 async_engine = create_async_engine(_url, **_engine_kwargs)
+logger.info("SQLAlchemy engine created — %s", "sqlite" if "sqlite" in _url else "postgresql")
 
 async_session_factory = async_sessionmaker(
     bind=async_engine,
@@ -51,3 +54,4 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def close_db_engine() -> None:
     """Dispose the engine on shutdown."""
     await async_engine.dispose()
+    logger.info("SQLAlchemy engine disposed")

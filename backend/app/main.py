@@ -1,12 +1,16 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
+from app.logging_config import setup_logging
 
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -93,6 +97,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Request / Response Logging Middleware ──
+req_logger = logging.getLogger("app.requests")
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start = time.perf_counter()
+        method = request.method
+        path = request.url.path
+        req_logger.info("%s %s", method, path)
+
+        response = await call_next(request)
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        log_fn = req_logger.warning if response.status_code >= 400 else req_logger.info
+        log_fn("%s %s → %d (%.0fms)", method, path, response.status_code, elapsed_ms)
+
+        return response
+
+
+app.add_middleware(RequestLoggingMiddleware)
 
 # ── Router Registration ──
 from app.api.routes import auth, jobs, resumes, candidates, analysis, feedback  # noqa: E402

@@ -1,5 +1,6 @@
 """Candidate listing routes."""
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -16,6 +17,7 @@ from app.models.enums import PipelineStatus
 from app.models.user import User
 from app.schemas.candidate import CandidateResponse, CandidateListResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -31,6 +33,7 @@ async def list_candidates_for_job(
         select(Job.id).where(Job.id == job_id, Job.created_by == current_user.id)
     )
     if job_check.scalar_one_or_none() is None:
+        logger.warning("Candidates list — job %s not found for user %s", job_id, current_user.id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
 
     # Join candidates → resumes → analyses for the given job
@@ -77,5 +80,4 @@ async def list_candidates_for_job(
                 created_at=candidate.created_at,
             )
         )
-
     return CandidateListResponse(candidates=candidates, total=len(candidates))
