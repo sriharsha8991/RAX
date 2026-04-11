@@ -1,5 +1,4 @@
 # RAX — Backend Core Implementation Tracker
-
 > **Owner:** Person 1 — Backend Core  
 > **Scope:** `backend/app/db/`, `backend/app/models/`, `backend/app/schemas/`, `backend/app/api/`, `backend/alembic/`, `backend/tests/`  
 > **DO NOT TOUCH:** `backend/app/agents/` (Person 2), `frontend/` (Person 3)  
