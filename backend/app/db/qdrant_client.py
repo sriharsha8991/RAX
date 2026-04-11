@@ -29,7 +29,7 @@ def init_qdrant_client() -> QdrantClient:
     _client = QdrantClient(
         url=settings.QDRANT_URL,
         api_key=settings.QDRANT_API_KEY or None,
-        timeout=5,  # 5s connection timeout — fail fast if Qdrant not running
+        timeout=30,  # 30s for cloud connections
     )
 
     # Ensure collections
