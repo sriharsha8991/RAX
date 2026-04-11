@@ -9,6 +9,7 @@ export default function FeedbackPage() {
   const { id } = useParams<{ id: string }>();
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
   const [feedbackError, setFeedbackError] = useState(false);
 
   useEffect(() => {
