@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { LayoutDashboard, Briefcase, LogOut, Menu, X } from 'lucide-react';
 import { useState } from 'react';
@@ -36,10 +36,12 @@ export default function AppShell() {
         }`}
       >
         <div className="flex items-center gap-2 px-6 py-5 border-b border-gray-200">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">
-            R
-          </div>
-          <span className="text-lg font-semibold text-gray-900">RAX</span>
+          <Link to="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">
+              R
+            </div>
+            <span className="text-lg font-semibold text-gray-900">RAX</span>
+          </Link>
           <button
             onClick={() => setSidebarOpen(false)}
             className="ml-auto lg:hidden text-gray-500 hover:text-gray-900"
