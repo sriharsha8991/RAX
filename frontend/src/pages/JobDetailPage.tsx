@@ -2,17 +2,25 @@ import { useParams, Link } from 'react-router-dom';
 import { getJob } from '@/services/jobService';
 import { useCachedFetch } from '@/hooks/useApiCache';
 import type { Job } from '@/types';
-import { Upload, Users } from 'lucide-react';
+import { Upload, Users, RefreshCw } from 'lucide-react';
+import { PageSpinner } from '@/components/ui/Spinner';
 
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: job, loading } = useCachedFetch<Job>(
+  const { data: job, loading, error, refetch } = useCachedFetch<Job>(
     id ? `job:${id}` : null,
     () => getJob(id!),
   );
 
-  if (loading) return <div className="text-sm text-gray-500">Loading…</div>;
-  if (!job) return <div className="text-sm text-red-500">Job not found</div>;
+  if (loading) return <PageSpinner label="Loading job details…" />;
+  if (error || !job) return (
+    <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <p className="text-sm text-red-600">{error ? 'Failed to load job details.' : 'Job not found.'}</p>
+      <button onClick={refetch} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+        <RefreshCw size={14} /> Retry
+      </button>
+    </div>
+  );
 
   return (
     <div className="max-w-3xl space-y-6">

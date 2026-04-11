@@ -4,16 +4,25 @@ import { useCachedFetch } from '@/hooks/useApiCache';
 import type { Analysis } from '@/types';
 import ScoreRadarChart from '@/components/RadarChart';
 import ScoreCard from '@/components/ScoreCard';
+import { PageSpinner } from '@/components/ui/Spinner';
+import { RefreshCw } from 'lucide-react';
 
 export default function CandidateDetailPage() {
   const { resumeId } = useParams<{ jobId: string; resumeId: string }>();
-  const { data: analysis, loading } = useCachedFetch<Analysis>(
+  const { data: analysis, loading, error, refetch } = useCachedFetch<Analysis>(
     resumeId ? `analysis:${resumeId}` : null,
     () => getAnalysis(resumeId!),
   );
 
-  if (loading) return <div className="text-sm text-gray-500">Loading analysis…</div>;
-  if (!analysis) return <div className="text-sm text-red-500">Analysis not found</div>;
+  if (loading) return <PageSpinner label="Loading analysis…" />;
+  if (error || !analysis) return (
+    <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <p className="text-sm text-red-600">{error ? 'Failed to load analysis.' : 'Analysis not found.'}</p>
+      <button onClick={refetch} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+        <RefreshCw size={14} /> Retry
+      </button>
+    </div>
+  );
 
   return (
     <div className="max-w-3xl space-y-6">

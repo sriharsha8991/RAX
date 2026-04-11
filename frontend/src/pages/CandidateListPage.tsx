@@ -3,40 +3,73 @@ import { useParams, Link } from 'react-router-dom';
 import { getCandidates, deleteResume } from '@/services/candidateService';
 import { useCachedFetch, clearCache } from '@/hooks/useApiCache';
 import type { CandidateWithScores, CandidateListResponse } from '@/types';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Loader2, RefreshCw } from 'lucide-react';
+import { PageSpinner, Skeleton } from '@/components/ui/Spinner';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 
 export default function CandidateListPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const [sortBy, setSortBy] = useState('overall_score');
   const [minScore, setMinScore] = useState(0);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{ resumeId: string; name: string } | null>(null);
+  const { toast } = useToast();
 
   const fetcher = useCallback(
     () => getCandidates(jobId!, sortBy),
     [jobId, sortBy],
   );
 
-  const { data, loading, refetch } = useCachedFetch<CandidateListResponse>(
+  const { data, loading, error, refetch } = useCachedFetch<CandidateListResponse>(
     jobId ? `candidates:${jobId}:${sortBy}` : null,
     fetcher,
   );
 
   const candidates: CandidateWithScores[] = data?.candidates ?? [];
 
-  const handleDelete = async (resumeId: string, name: string) => {
-    if (!confirm(`Delete candidate "${name}"? This will remove the resume and analysis.`)) return;
+  const handleDelete = async () => {
+    if (!confirmTarget) return;
+    setDeletingId(confirmTarget.resumeId);
+    setConfirmTarget(null);
     try {
-      await deleteResume(resumeId);
+      await deleteResume(confirmTarget.resumeId);
       clearCache(`candidates:${jobId}`);
+      toast('success', `"${confirmTarget.name}" removed successfully.`);
       refetch();
     } catch {
-      alert('Failed to delete candidate.');
+      toast('error', 'Failed to delete candidate. Please try again.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
   const filtered = candidates.filter((c) => c.overall_score >= minScore);
 
+  if (loading && !data) return <PageSpinner label="Loading candidates…" />;
+
+  if (error && !data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <p className="text-sm text-red-600">Failed to load candidates.</p>
+        <button onClick={refetch} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+          <RefreshCw size={14} /> Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      <ConfirmDialog
+        open={!!confirmTarget}
+        title="Delete Candidate"
+        message={`Remove "${confirmTarget?.name}"? This will permanently delete the resume and all analysis data.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmTarget(null)}
+      />
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-xl font-bold text-gray-900">Candidates</h2>
         <div className="flex items-center gap-4">
@@ -66,8 +99,10 @@ export default function CandidateListPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        {loading ? (
-          <div className="p-6 text-sm text-gray-500">Loading…</div>
+        {loading && !data ? (
+          <div className="p-6 space-y-3">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+          </div>
         ) : filtered.length === 0 ? (
           <div className="p-6 text-center text-sm text-gray-500">
             No candidates found.
@@ -131,11 +166,16 @@ export default function CandidateListPage() {
                         Detail
                       </Link>
                       <button
-                        onClick={() => handleDelete(c.resume_id, c.name || `Candidate ${c.id.slice(0, 8)}`)}
-                        className="text-gray-400 hover:text-red-600 transition-colors"
+                        onClick={() => setConfirmTarget({ resumeId: c.resume_id, name: c.name || `Candidate ${c.id.slice(0, 8)}` })}
+                        disabled={deletingId === c.resume_id}
+                        className="text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
                         title="Delete"
                       >
-                        <Trash2 size={15} />
+                        {deletingId === c.resume_id ? (
+                          <Loader2 size={15} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={15} />
+                        )}
                       </button>
                     </div>
                   </td>

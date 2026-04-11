@@ -2,8 +2,10 @@ import { useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { uploadResumes } from '@/services/resumeService';
 import { useProcessingStream } from '@/hooks/useProcessingStream';
+import { clearCache } from '@/hooks/useApiCache';
 import ProcessingCard from '@/components/ProcessingCard';
-import { Upload, X, FileText, ChevronRight } from 'lucide-react';
+import { Upload, X, FileText, ChevronRight, Loader2 } from 'lucide-react';
+import { useToast } from '@/components/ui/Toast';
 
 export default function UploadPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -11,6 +13,7 @@ export default function UploadPage() {
   const [uploadedIds, setUploadedIds] = useState<{ resumeId: string; filename: string }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const { toast } = useToast();
 
   // Only connect WS after upload
   const { statuses } = useProcessingStream(uploadedIds.length > 0 ? (jobId ?? null) : null);
@@ -43,9 +46,15 @@ export default function UploadPage() {
         results.map((r, i) => ({ resumeId: r.id, filename: files[i]?.name ?? 'resume' }))
       );
       setFiles([]);
+      clearCache(`candidates:${jobId}`);
+      toast('success', `${results.length} resume${results.length > 1 ? 's' : ''} uploaded — processing started.`);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(msg || 'Upload failed');
+      if ((err as { message?: string })?.message === 'Network Error') {
+        setError('Cannot reach server. Please check your connection and try again.');
+      } else {
+        setError(msg || 'Upload failed. Please try again.');
+      }
     } finally {
       setUploading(false);
     }
@@ -107,17 +116,25 @@ export default function UploadPage() {
           )}
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
-              {error}
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 flex items-start gap-2">
+              <span className="shrink-0 mt-0.5">⚠</span>
+              <span>{error}</span>
             </div>
           )}
 
           <button
             onClick={handleUpload}
             disabled={files.length === 0 || uploading}
-            className="w-full py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            className="w-full py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
           >
-            {uploading ? 'Uploading…' : `Upload ${files.length} file${files.length !== 1 ? 's' : ''}`}
+            {uploading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Uploading…
+              </>
+            ) : (
+              `Upload ${files.length} file${files.length !== 1 ? 's' : ''}`
+            )}
           </button>
         </>
       ) : (

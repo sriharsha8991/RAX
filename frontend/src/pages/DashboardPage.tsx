@@ -2,13 +2,27 @@ import { Link } from 'react-router-dom';
 import { getJobs } from '@/services/jobService';
 import { useCachedFetch } from '@/hooks/useApiCache';
 import type { Job, JobListResponse } from '@/types';
-import { Briefcase, FileText, Plus } from 'lucide-react';
+import { Briefcase, FileText, Plus, RefreshCw } from 'lucide-react';
+import { PageSpinner, Skeleton } from '@/components/ui/Spinner';
 
 export default function DashboardPage() {
-  const { data, loading } = useCachedFetch<JobListResponse>('dashboard:jobs', getJobs);
+  const { data, loading, error, refetch } = useCachedFetch<JobListResponse>('dashboard:jobs', getJobs);
   const jobs: Job[] = data?.jobs ?? [];
 
   const activeCount = jobs.filter((j) => j.status === 'active').length;
+
+  if (loading && !data) return <PageSpinner label="Loading dashboard…" />;
+
+  if (error && !data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <p className="text-sm text-red-600">Failed to load dashboard data.</p>
+        <button onClick={refetch} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+          <RefreshCw size={14} /> Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -32,7 +46,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {loading ? '…' : activeCount}
+                {loading ? <Skeleton className="h-7 w-10" /> : activeCount}
               </p>
               <p className="text-sm text-gray-500">Active Jobs</p>
             </div>
@@ -46,7 +60,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {loading ? '…' : jobs.length}
+                {loading ? <Skeleton className="h-7 w-10" /> : jobs.length}
               </p>
               <p className="text-sm text-gray-500">Total Jobs</p>
             </div>
@@ -60,7 +74,9 @@ export default function DashboardPage() {
           <h3 className="text-sm font-semibold text-gray-900">Recent Jobs</h3>
         </div>
         {loading ? (
-          <div className="p-5 text-sm text-gray-500">Loading…</div>
+          <div className="p-5 space-y-3">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
         ) : jobs.length === 0 ? (
           <div className="p-5 text-center text-sm text-gray-500">
             No jobs yet.{' '}

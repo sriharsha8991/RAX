@@ -3,18 +3,19 @@ import { useParams } from 'react-router-dom';
 import { getFeedback } from '@/services/feedbackService';
 import type { Feedback } from '@/types';
 import { Copy, Check } from 'lucide-react';
+import { PageSpinner } from '@/components/ui/Spinner';
 
 export default function FeedbackPage() {
   const { id } = useParams<{ id: string }>();
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [feedbackError, setFeedbackError] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     getFeedback(id)
       .then(setFeedback)
-      .catch(() => {})
+      .catch(() => setFeedbackError(true))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -25,8 +26,12 @@ export default function FeedbackPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (loading) return <div className="text-sm text-gray-500">Loading feedback…</div>;
-  if (!feedback) return <div className="text-sm text-red-500">Feedback not found</div>;
+  if (loading) return <PageSpinner label="Loading feedback…" />;
+  if (feedbackError || !feedback) return (
+    <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <p className="text-sm text-red-600">{feedbackError ? 'Failed to load feedback.' : 'Feedback not found.'}</p>
+    </div>
+  );
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">

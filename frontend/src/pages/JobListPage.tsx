@@ -3,29 +3,59 @@ import { Link } from 'react-router-dom';
 import { getJobs, deleteJob } from '@/services/jobService';
 import { useCachedFetch, clearCache } from '@/hooks/useApiCache';
 import type { Job, JobListResponse } from '@/types';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Loader2, RefreshCw } from 'lucide-react';
+import { PageSpinner, Skeleton } from '@/components/ui/Spinner';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 
 export default function JobListPage() {
-  const { data, loading, refetch } = useCachedFetch<JobListResponse>('jobs:list', getJobs);
+  const { data, loading, error, refetch } = useCachedFetch<JobListResponse>('jobs:list', getJobs);
   const jobs: Job[] = data?.jobs ?? [];
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; title: string } | null>(null);
+  const { toast } = useToast();
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this job and all its resumes/candidates? This cannot be undone.')) return;
-    setDeleting(id);
+  const handleDelete = async () => {
+    if (!confirmTarget) return;
+    setDeleting(confirmTarget.id);
+    setConfirmTarget(null);
     try {
-      await deleteJob(id);
+      await deleteJob(confirmTarget.id);
       clearCache('jobs:list');
+      clearCache('dashboard');
+      toast('success', `"${confirmTarget.title}" deleted successfully.`);
       refetch();
     } catch {
-      alert('Failed to delete job');
+      toast('error', 'Failed to delete job. Please try again.');
     } finally {
       setDeleting(null);
     }
   };
 
+  if (loading && !data) return <PageSpinner label="Loading jobs…" />;
+
+  if (error && !data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <p className="text-sm text-red-600">Failed to load jobs.</p>
+        <button onClick={refetch} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+          <RefreshCw size={14} /> Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      <ConfirmDialog
+        open={!!confirmTarget}
+        title="Delete Job"
+        message={`Are you sure you want to delete "${confirmTarget?.title}"? All associated resumes, candidates, and analysis data will be permanently removed.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmTarget(null)}
+      />
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-gray-900">Jobs</h2>
         <Link
@@ -38,8 +68,10 @@ export default function JobListPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {loading ? (
-          <div className="p-6 text-sm text-gray-500">Loading…</div>
+        {loading && !data ? (
+          <div className="p-6 space-y-3">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+          </div>
         ) : jobs.length === 0 ? (
           <div className="p-6 text-center text-sm text-gray-500">
             No jobs found.
@@ -95,12 +127,16 @@ export default function JobListPage() {
                       Candidates
                     </Link>
                     <button
-                      onClick={() => handleDelete(job.id)}
+                      onClick={() => setConfirmTarget({ id: job.id, title: job.title })}
                       disabled={deleting === job.id}
                       className="text-sm text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
                       title="Delete job"
                     >
-                      <Trash2 size={15} className="inline" />
+                      {deleting === job.id ? (
+                        <Loader2 size={15} className="inline animate-spin" />
+                      ) : (
+                        <Trash2 size={15} className="inline" />
+                      )}
                     </button>
                   </td>
                 </tr>
