@@ -15,7 +15,7 @@ from app.db.session import get_db
 from app.api.dependencies import get_current_user
 from app.models.user import User
 from app.models.enums import UserRole
-from app.schemas.user import UserCreate, UserLogin, UserResponse, TokenResponse
+from app.schemas.user import UserCreate, UserLogin, UserResponse, TokenResponse, RegisterResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -40,7 +40,7 @@ def _create_access_token(user: User) -> str:
     return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 async def register(body: UserCreate, db: AsyncSession = Depends(get_db)):
     logger.info("Registration attempt: %s", body.email)
     # Check duplicate email
@@ -65,7 +65,16 @@ async def register(body: UserCreate, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(user)
     logger.info("User registered: %s (role=%s)", user.email, user.role.value)
-    return user
+    token = _create_access_token(user)
+    return RegisterResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role.value,
+        created_at=user.created_at,
+        access_token=token,
+        token_type="bearer",
+    )
 
 
 @router.post("/login", response_model=TokenResponse)

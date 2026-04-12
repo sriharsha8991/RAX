@@ -42,20 +42,20 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   register: async (email, password, fullName, role) => {
-    await registerApi(email, password, fullName, role);
-    // Auto-login after register
-    const resp = await loginApi(email, password);
-    const payload = decodeJwtPayload(resp.access_token);
+    const resp = await registerApi(email, password, fullName, role);
+    // Register now returns token directly — no second login call needed
+    const token = (resp as unknown as { access_token: string }).access_token;
+    const payload = decodeJwtPayload(token);
     const user: User = {
-      id: String(payload.sub ?? ''),
+      id: String(payload.sub ?? resp.id ?? ''),
       email,
       full_name: fullName,
       role,
       created_at: '',
     };
-    localStorage.setItem('rax_token', resp.access_token);
+    localStorage.setItem('rax_token', token);
     localStorage.setItem('rax_user', JSON.stringify(user));
-    set({ token: resp.access_token, user, isAuthenticated: true });
+    set({ token, user, isAuthenticated: true });
   },
 
   logout: () => {

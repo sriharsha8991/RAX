@@ -16,14 +16,17 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor: auto-logout on 401
+// Response interceptor: auto-logout on 401 (skip auth endpoints so errors show in the form)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('rax_token');
-      localStorage.removeItem('rax_user');
-      window.location.href = '/login';
+      const url = error.config?.url || '';
+      if (!url.includes('/auth/login') && !url.includes('/auth/register')) {
+        localStorage.removeItem('rax_token');
+        localStorage.removeItem('rax_user');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

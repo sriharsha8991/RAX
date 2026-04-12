@@ -29,3 +29,9 @@ class UserResponse(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class RegisterResponse(UserResponse):
+    """Register returns user info + token so no second login call is needed."""
+    access_token: str
+    token_type: str = "bearer"
