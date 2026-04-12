@@ -22,3 +22,9 @@ class PipelineStatus(str, enum.Enum):
     scoring = "scoring"
     completed = "completed"
     failed = "failed"
+
+
+class NotificationStatus(str, enum.Enum):
+    not_sent = "not_sent"
+    shortlisted = "shortlisted"
+    rejected = "rejected"

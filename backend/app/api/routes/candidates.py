@@ -77,6 +77,7 @@ async def list_candidates_for_job(
                 education_score=education_score,
                 explanation=explanation,
                 pipeline_status=pipeline_status.value if pipeline_status else None,
+                notification_status=candidate.notification_status.value if candidate.notification_status else None,
                 created_at=candidate.created_at,
             )
         )

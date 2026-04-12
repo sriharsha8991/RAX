@@ -131,7 +131,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 # ── Router Registration ──
-from app.api.routes import auth, jobs, resumes, candidates, analysis, feedback  # noqa: E402
+from app.api.routes import auth, jobs, resumes, candidates, analysis, feedback, notifications  # noqa: E402
 from app.api.routes import ws  # noqa: E402
 
 app.include_router(auth.router,       prefix="/api/auth",       tags=["Auth"])
@@ -139,8 +139,9 @@ app.include_router(jobs.router,       prefix="/api/jobs",       tags=["Jobs"])
 app.include_router(resumes.router,    prefix="/api/resumes",    tags=["Resumes"])
 app.include_router(candidates.router, prefix="/api",            tags=["Candidates"])
 app.include_router(analysis.router,   prefix="/api",            tags=["Analysis"])
-app.include_router(feedback.router,   prefix="/api/feedback",   tags=["Feedback"])
-app.include_router(ws.router,         tags=["WebSocket"])
+app.include_router(feedback.router,      prefix="/api/feedback",   tags=["Feedback"])
+app.include_router(notifications.router, prefix="/api",            tags=["Notifications"])
+app.include_router(ws.router,            tags=["WebSocket"])
 
 
 @app.get("/")

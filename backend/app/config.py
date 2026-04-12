@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # ── Upload limits ──
     MAX_UPLOAD_SIZE_MB: int = 10
 
+    # ── Email (Resend) ──
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "RAX <onboarding@resend.dev>"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

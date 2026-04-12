@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getCandidates, deleteResume } from '@/services/candidateService';
+import { getCandidates, deleteResume, notifyCandidate } from '@/services/candidateService';
 import { useCachedFetch, clearCache } from '@/hooks/useApiCache';
 import type { CandidateWithScores, CandidateListResponse } from '@/types';
-import { Trash2, Loader2, RefreshCw } from 'lucide-react';
+import { Trash2, Loader2, RefreshCw, Mail } from 'lucide-react';
 import { PageSpinner, Skeleton } from '@/components/ui/Spinner';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import NotifyModal from '@/components/ui/NotifyModal';
 import { useToast } from '@/components/ui/Toast';
 
 export default function CandidateListPage() {
@@ -14,6 +15,7 @@ export default function CandidateListPage() {
   const [minScore, setMinScore] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<{ resumeId: string; name: string } | null>(null);
+  const [notifyTarget, setNotifyTarget] = useState<CandidateWithScores | null>(null);
   const { toast } = useToast();
 
   const fetcher = useCallback(
@@ -46,6 +48,19 @@ export default function CandidateListPage() {
 
   const filtered = candidates.filter((c) => c.overall_score >= minScore);
 
+  const handleNotify = async (type: 'shortlisted' | 'rejected', customMessage?: string) => {
+    if (!notifyTarget) return;
+    try {
+      await notifyCandidate(notifyTarget.id, type, customMessage);
+      toast('success', `Email sent to ${notifyTarget.email}`);
+      clearCache(`candidates:${jobId}`);
+      setNotifyTarget(null);
+      refetch();
+    } catch {
+      toast('error', 'Failed to send notification email.');
+    }
+  };
+
   if (loading && !data) return <PageSpinner label="Loading candidates…" />;
 
   if (error && !data) {
@@ -69,6 +84,13 @@ export default function CandidateListPage() {
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setConfirmTarget(null)}
+      />
+      <NotifyModal
+        open={!!notifyTarget}
+        candidateName={notifyTarget?.name || `Candidate ${notifyTarget?.id.slice(0, 8) ?? ''}`}
+        candidateEmail={notifyTarget?.email ?? null}
+        onSend={handleNotify}
+        onClose={() => setNotifyTarget(null)}
       />
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-xl font-bold text-gray-900">Candidates</h2>
@@ -126,6 +148,7 @@ export default function CandidateListPage() {
                   Edu
                 </th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Status</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Notified</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
               </tr>
             </thead>
@@ -157,6 +180,9 @@ export default function CandidateListPage() {
                       {c.pipeline_status}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-center">
+                    <NotificationBadge status={c.notification_status} />
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Link
@@ -165,6 +191,13 @@ export default function CandidateListPage() {
                       >
                         Detail
                       </Link>
+                      <button
+                        onClick={() => setNotifyTarget(c)}
+                        className="text-gray-400 hover:text-indigo-600 transition-colors"
+                        title="Send notification email"
+                      >
+                        <Mail size={15} />
+                      </button>
                       <button
                         onClick={() => setConfirmTarget({ resumeId: c.resume_id, name: c.name || `Candidate ${c.id.slice(0, 8)}` })}
                         disabled={deletingId === c.resume_id}
@@ -197,6 +230,21 @@ function ScoreBadge({ score }: { score: number }) {
   return (
     <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded-full ${color}`}>
       {score}
+    </span>
+  );
+}
+
+function NotificationBadge({ status }: { status: string | null }) {
+  if (!status || status === 'not_sent') {
+    return <span className="text-xs text-gray-400">—</span>;
+  }
+  const color =
+    status === 'shortlisted'
+      ? 'bg-green-100 text-green-700'
+      : 'bg-red-100 text-red-700';
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${color}`}>
+      {status}
     </span>
   );
 }

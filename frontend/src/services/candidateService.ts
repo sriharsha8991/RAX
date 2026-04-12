@@ -21,3 +21,15 @@ export async function getAnalysis(resumeId: string): Promise<Analysis> {
 export async function deleteResume(resumeId: string): Promise<void> {
   await api.delete(`/resumes/${resumeId}`);
 }
+
+export async function notifyCandidate(
+  candidateId: string,
+  type: 'shortlisted' | 'rejected',
+  customMessage?: string
+): Promise<{ status: string; email: string }> {
+  const { data } = await api.post(`/candidates/${candidateId}/notify`, {
+    type,
+    custom_message: customMessage,
+  });
+  return data;
+}

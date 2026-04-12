@@ -60,6 +60,8 @@ export interface ResumeStatus {
   created_at: string;
 }
 
+export type NotificationStatus = 'not_sent' | 'shortlisted' | 'rejected';
+
 export interface CandidateWithScores {
   id: string;
   name: string | null;
@@ -70,6 +72,7 @@ export interface CandidateWithScores {
   experience_score: number;
   education_score: number;
   pipeline_status: PipelineStatus;
+  notification_status: NotificationStatus | null;
   explanation: string;
 }
 

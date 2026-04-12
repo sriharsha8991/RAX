@@ -18,6 +18,7 @@ class CandidateResponse(BaseModel):
     education_score: float | None = None
     explanation: str | None = None
     pipeline_status: str | None = None
+    notification_status: str | None = None
     created_at: datetime
 
 

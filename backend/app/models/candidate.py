@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, func
+from sqlalchemy import String, Enum, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.models.enums import NotificationStatus
 
 
 class Candidate(Base):
@@ -16,6 +17,12 @@ class Candidate(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     neo4j_node_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notification_status: Mapped[NotificationStatus] = mapped_column(
+        Enum(NotificationStatus, name="notificationstatus"),
+        nullable=False,
+        default=NotificationStatus.not_sent,
+        server_default="not_sent",
+    )
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=func.now())
 
     # relationships
