@@ -1,15 +1,30 @@
-"""Email notification service using Resend."""
+"""Email notification service using Gmail SMTP."""
 
+import asyncio
 import logging
-from typing import Literal
-
-import httpx
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-RESEND_API_URL = "https://api.resend.com/emails"
+
+def _send_smtp(to: str, subject: str, html_body: str) -> None:
+    """Blocking SMTP send — called via asyncio.to_thread."""
+    settings = get_settings()
+
+    msg = MIMEMultipart("alternative")
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.attach(MIMEText(html_body, "html"))
+
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+        server.starttls()
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        server.sendmail(settings.EMAIL_FROM, [to], msg.as_string())
 
 
 async def send_email(
@@ -17,35 +32,26 @@ async def send_email(
     subject: str,
     html_body: str,
 ) -> dict:
-    """Send a single email via Resend API. Returns the Resend response dict."""
+    """Send an email via Gmail SMTP. Runs the blocking call in a thread."""
     settings = get_settings()
-    api_key = settings.RESEND_API_KEY
 
-    if not api_key:
-        logger.error("RESEND_API_KEY not set — skipping email to %s", to)
-        raise RuntimeError("Email service not configured (RESEND_API_KEY missing)")
+    if not settings.SMTP_PASSWORD:
+        logger.error("SMTP_PASSWORD not set — skipping email to %s", to)
+        raise RuntimeError("Email service not configured (SMTP_PASSWORD missing)")
 
-    payload = {
-        "from": settings.EMAIL_FROM,
-        "to": [to],
-        "subject": subject,
-        "html": html_body,
-    }
-
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            RESEND_API_URL,
-            json=payload,
-            headers={"Authorization": f"Bearer {api_key}"},
+    try:
+        await asyncio.to_thread(_send_smtp, to, subject, html_body)
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error("SMTP auth failed: %s", e)
+        raise RuntimeError(
+            "Gmail authentication failed. Check SMTP_USER and SMTP_PASSWORD (App Password)."
         )
+    except smtplib.SMTPException as e:
+        logger.error("SMTP error sending to %s: %s", to, e)
+        raise RuntimeError(f"Email delivery failed: {e}")
 
-    if resp.status_code >= 400:
-        logger.error("Resend API error %d: %s", resp.status_code, resp.text)
-        raise RuntimeError(f"Email delivery failed: {resp.text}")
-
-    data = resp.json()
-    logger.info("Email sent to %s — id=%s", to, data.get("id"))
-    return data
+    logger.info("Email sent to %s via Gmail SMTP", to)
+    return {"to": to, "status": "sent"}
 
 
 def build_shortlisted_email(

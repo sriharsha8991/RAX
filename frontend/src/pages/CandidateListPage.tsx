@@ -60,9 +60,11 @@ export default function CandidateListPage() {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       if (detail?.includes('not configured')) {
-        toast('error', 'Email service is not configured. Set RESEND_API_KEY on the server.');
+        toast('error', 'Email service is not configured. Set SMTP_PASSWORD on the server.');
       } else if (detail?.includes('no email')) {
         toast('error', 'This candidate has no email address on file.');
+      } else if (detail?.includes('authentication failed')) {
+        toast('error', 'Gmail authentication failed. Check the App Password in server settings.');
       } else if (detail?.includes('delivery failed')) {
         toast('error', `Email delivery failed: ${detail}`);
       } else {
