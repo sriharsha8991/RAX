@@ -28,9 +28,11 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 # Track background pipeline tasks so they aren't garbage-collected
 _background_tasks: set[asyncio.Task] = set()
 
-# Limit how many pipelines can run concurrently (each pipeline has
-# 2 LLM calls + vector/graph I/O, so 3 is a safe default).
-_PIPELINE_CONCURRENCY = 3
+# Limit how many pipelines can run concurrently. Extraction itself is now
+# very fast (pypdfium2), so the bottleneck is the LLM (Gemini). 6 is a safe
+# default that respects typical free-tier rate limits while keeping batches
+# of 100 resumes flowing.
+_PIPELINE_CONCURRENCY = 6
 _pipeline_semaphore: asyncio.Semaphore | None = None
 
 
@@ -217,16 +219,10 @@ async def upload_resume(
     # Sanitize filename to prevent path traversal
     safe_filename = _sanitize_filename(file.filename or "resume")
 
-    # Upload to Supabase Storage (best-effort, run in thread to avoid blocking)
+    # Persist file (local FS or Supabase depending on USE_LOCAL_SERVICES)
     file_path = f"resumes/{candidate.id}/{safe_filename}"
-    try:
-        from app.db.supabase_client import get_supabase
-
-        sb = get_supabase()
-        await asyncio.to_thread(sb.storage.from_("resumes").upload, file_path, file_bytes)
-    except Exception as e:
-        logger.warning("Supabase storage upload failed: %s", e)
-        # Continue — file_path is still set as the intended path
+    from app.services.storage import save_file
+    await save_file(file_bytes, file_path)
 
     # Create resume record
     resume = Resume(
@@ -296,13 +292,9 @@ async def upload_resumes_batch(
         safe_filename = _sanitize_filename(file.filename or "resume")
         file_path = f"resumes/{candidate.id}/{safe_filename}"
 
-        # Best-effort Supabase upload
-        try:
-            from app.db.supabase_client import get_supabase
-            sb = get_supabase()
-            await asyncio.to_thread(sb.storage.from_("resumes").upload, file_path, file_bytes)
-        except Exception as e:
-            logger.warning("Supabase storage upload failed for %s: %s", safe_filename, e)
+        # Persist file (local FS or Supabase depending on USE_LOCAL_SERVICES)
+        from app.services.storage import save_file
+        await save_file(file_bytes, file_path)
 
         resume = Resume(
             candidate_id=candidate.id,

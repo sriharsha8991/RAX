@@ -37,5 +37,8 @@ def init_supabase_client() -> Client:
 def get_supabase() -> Client:
     """Return the singleton Supabase client. Raises if not initialised."""
     if _client is None:
-        raise RuntimeError("Supabase client not initialised — call init_supabase_client() first")
+        raise RuntimeError(
+            "Supabase client not initialised — call init_supabase_client() first "
+            "or set USE_LOCAL_SERVICES=false in .env"
+        )
     return _client

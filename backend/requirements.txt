@@ -26,7 +26,10 @@ neo4j==5.28.*
 qdrant-client==1.17.*
 
 # ─── Resume Parsing ──────────────────────────────────────────────────────────
-pypdf2==3.0.*
+# PyMuPDF (fitz) — C-backed MuPDF engine. Fastest Python PDF text extractor,
+# thread-safe since v1.24.3, low memory footprint. Handles 100+ concurrent
+# extractions without serialization.
+pymupdf>=1.24.3
 python-docx==1.1.*
 
 # ─── WebSocket (included in FastAPI/uvicorn, listed for clarity) ──────────────

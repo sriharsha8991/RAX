@@ -11,9 +11,11 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,        // allow access from Docker network
+    port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8002',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8000',
         changeOrigin: true,
       },
     },

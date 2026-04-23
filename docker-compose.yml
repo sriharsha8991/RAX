@@ -1,13 +1,33 @@
-# Note: PostgreSQL is hosted on Supabase (cloud). Neo4j + Qdrant run locally.
-# Set DATABASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD in your .env file.
+# Full local development stack: PostgreSQL + Neo4j + Qdrant + Backend + Frontend
+# Usage:
+#   docker compose up -d                     # all services
+#   docker compose up -d postgres neo4j qdrant   # infra only (run backend/frontend locally)
+#   docker compose --profile app up -d       # include backend + frontend
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: rax_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: rax
+      POSTGRES_PASSWORD: rax_dev_password
+      POSTGRES_DB: rax
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rax -d rax"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   neo4j:
     image: neo4j:5-community
     container_name: rax_neo4j
     ports:
-      - "7475:7474"    # Neo4j Browser UI
-      - "7688:7687"    # Bolt protocol
+      - "7475:7474"    # Neo4j Browser UI (7475 to avoid conflict)
+      - "7688:7687"    # Bolt protocol (7688 to avoid conflict)
     environment:
       NEO4J_AUTH: neo4j/rax_dev_password
       NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
@@ -29,12 +49,57 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/healthz || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rax_backend
+    profiles: ["app"]
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override .env so the backend talks to other containers via service DNS
+      DATABASE_URL: postgresql+asyncpg://rax:rax_dev_password@postgres:5432/rax
+      NEO4J_URI: bolt://neo4j:7687
+      QDRANT_URL: http://qdrant:6333
+      USE_LOCAL_SERVICES: "true"
+      CORS_ORIGINS: http://localhost:5173
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    volumes:
+      - ./backend:/app    # hot-reload friendly; comment out for prod-like build
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rax_frontend
+    profiles: ["app"]
+    ports:
+      - "5173:5173"
+    environment:
+      # Vite dev server proxies /api → backend container
+      VITE_PROXY_TARGET: http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules    # keep container's node_modules
+
 volumes:
+  postgres_data:
   neo4j_data:
   neo4j_logs:
   qdrant_data:

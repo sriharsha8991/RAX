@@ -42,13 +42,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         failures.append(f"Qdrant: {e}")
 
-    # 3. Supabase (storage client + Postgres via SQLAlchemy)
-    try:
-        init_supabase_client()
-        logger.info("✔ Supabase storage client connected")
-    except Exception as e:
-        failures.append(f"Supabase storage: {e}")
+    # 3. Supabase storage (skip when running locally)
+    _settings = get_settings()
+    if not _settings.USE_LOCAL_SERVICES:
+        try:
+            init_supabase_client()
+            logger.info("✔ Supabase storage client connected")
+        except Exception as e:
+            failures.append(f"Supabase storage: {e}")
+    else:
+        logger.info("⏭ Supabase storage skipped (USE_LOCAL_SERVICES=true)")
 
+    # 4. PostgreSQL (local Docker or Supabase pooler)
     try:
         async with async_engine.connect() as conn:
             await conn.execute(text("SELECT 1"))

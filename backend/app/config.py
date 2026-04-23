@@ -7,10 +7,15 @@ class Settings(BaseSettings):
     # ── Google Gemini ──
     GOOGLE_API_KEY: str
 
-    # ── Supabase / Postgres ──
+    # ── Local vs Cloud mode ──
+    USE_LOCAL_SERVICES: bool = True
+
+    # ── Postgres ──
     DATABASE_URL: str
-    SUPABASE_URL: str
-    SUPABASE_ANON_KEY: str
+
+    # ── Supabase (storage — only required when USE_LOCAL_SERVICES=false) ──
+    SUPABASE_URL: str = ""
+    SUPABASE_ANON_KEY: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
 
     # ── Neo4j ──

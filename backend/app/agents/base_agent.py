@@ -20,10 +20,14 @@ _genai_client: genai.Client | None = None
 # Timeout (seconds) applied to every Gemini API call
 GEMINI_TIMEOUT = 90
 
-# Limit concurrent Gemini API calls to avoid rate-limit errors
-# when processing multiple resumes in parallel.
+# ── Concurrency limits ────────────────────────────────────────────────────────
+# Separate semaphores for generation vs. embedding — they hit different
+# endpoints with different rate limits. Embeddings are cheap and fast, so
+# they shouldn't be gated by the (smaller) generation slot pool.
 _LLM_SEMAPHORE: asyncio.Semaphore | None = None
-_LLM_CONCURRENCY = 3  # max simultaneous Gemini calls
+_EMBED_SEMAPHORE: asyncio.Semaphore | None = None
+_LLM_CONCURRENCY = 8      # max simultaneous generate_content calls
+_EMBED_CONCURRENCY = 16   # max simultaneous embed_content calls
 
 
 def _get_llm_semaphore() -> asyncio.Semaphore:
@@ -31,6 +35,29 @@ def _get_llm_semaphore() -> asyncio.Semaphore:
     if _LLM_SEMAPHORE is None:
         _LLM_SEMAPHORE = asyncio.Semaphore(_LLM_CONCURRENCY)
     return _LLM_SEMAPHORE
+
+
+def _get_embed_semaphore() -> asyncio.Semaphore:
+    global _EMBED_SEMAPHORE
+    if _EMBED_SEMAPHORE is None:
+        _EMBED_SEMAPHORE = asyncio.Semaphore(_EMBED_CONCURRENCY)
+    return _EMBED_SEMAPHORE
+
+
+# ── Shared generation config ──────────────────────────────────────────────────
+# Gemini 2.5 Flash ships with "thinking" enabled by default, which silently
+# adds 5–15 seconds of latency per call. We disable it for the whole pipeline —
+# every prompt in this codebase is a deterministic extraction / scoring task
+# that does NOT benefit from chain-of-thought. This is the single biggest
+# latency win for the pipeline.
+#
+# We also request JSON output natively, which makes parsing more reliable
+# (no markdown fences) and slightly reduces output tokens.
+def _json_gen_config() -> types.GenerateContentConfig:
+    return types.GenerateContentConfig(
+        response_mime_type="application/json",
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
+    )
 
 
 def _get_genai_client() -> genai.Client:
@@ -68,6 +95,42 @@ class BaseAgent(abc.ABC):
                     response = await client.aio.models.generate_content(
                         model=cls._model_name,
                         contents=prompt,
+                        config=_json_gen_config(),
+                    )
+            except TimeoutError:
+                raise RuntimeError(f"Gemini API call timed out after {GEMINI_TIMEOUT}s")
+
+        text = (response.text or "").strip()
+        if not text:
+            raise RuntimeError("Gemini returned empty response (possibly blocked by safety filters)")
+        return strip_markdown_fences(text)
+
+    @classmethod
+    async def call_llm_with_images(
+        cls,
+        prompt: str,
+        images: list[bytes],
+        mime_type: str = "image/png",
+    ) -> str:
+        """Call Gemini multimodal with a text prompt + inline image bytes.
+
+        Used for image-only / "Print to PDF" resumes where native text
+        extraction yields nothing. Gemini Flash handles OCR + structured
+        extraction in a single call — no Tesseract dependency needed.
+        """
+        client = _get_genai_client()
+        sem = _get_llm_semaphore()
+        contents: list = [
+            types.Part.from_bytes(data=img, mime_type=mime_type) for img in images
+        ]
+        contents.append(prompt)
+        async with sem:
+            try:
+                async with asyncio.timeout(GEMINI_TIMEOUT):
+                    response = await client.aio.models.generate_content(
+                        model=cls._model_name,
+                        contents=contents,
+                        config=_json_gen_config(),
                     )
             except TimeoutError:
                 raise RuntimeError(f"Gemini API call timed out after {GEMINI_TIMEOUT}s")
@@ -81,7 +144,7 @@ class BaseAgent(abc.ABC):
     async def embed_text(cls, text: str) -> list[float]:
         """Generate a 768-dim embedding using Gemini embedding model."""
         client = _get_genai_client()
-        sem = _get_llm_semaphore()
+        sem = _get_embed_semaphore()
         async with sem:
             try:
                 async with asyncio.timeout(GEMINI_TIMEOUT):
